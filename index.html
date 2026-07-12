@@ -3,142 +3,489 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Extraction de texte PDF</title>
+  <title>Courrier administratif</title>
   <style>
     * { box-sizing: border-box; }
     body {
       font-family: system-ui, -apple-system, sans-serif;
-      max-width: 720px;
-      margin: 40px auto;
+      max-width: 900px;
+      margin: 30px auto;
       padding: 0 20px;
       color: #1a1a1a;
     }
-    h1 { font-size: 1.5rem; }
+    h1 { font-size: 1.4rem; }
+    h2 { font-size: 1.1rem; margin-top: 0; }
+
+    nav { display: flex; gap: 4px; border-bottom: 2px solid #e0e0e0; margin-bottom: 20px; }
+    nav button {
+      padding: 10px 18px;
+      border: none;
+      background: none;
+      font-size: 1rem;
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      margin-bottom: -2px;
+      color: #666;
+    }
+    nav button.active { color: #4f7cff; border-bottom-color: #4f7cff; font-weight: 600; }
+
+    .card {
+      border: 1px solid #e0e0e0;
+      border-radius: 8px;
+      padding: 16px;
+      margin-bottom: 16px;
+    }
     .drop-zone {
       border: 2px dashed #bbb;
       border-radius: 8px;
-      padding: 40px 20px;
+      padding: 24px;
       text-align: center;
       cursor: pointer;
+      color: #666;
       transition: border-color 0.2s, background 0.2s;
     }
-    .drop-zone.dragover {
-      border-color: #4f7cff;
-      background: #f0f4ff;
+    .drop-zone.dragover { border-color: #4f7cff; background: #f0f4ff; }
+    .drop-zone .file-name { font-weight: 600; color: #1a1a1a; margin-top: 6px; }
+
+    textarea {
+      width: 100%;
+      font-family: inherit;
+      font-size: 0.95rem;
+      padding: 10px;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      resize: vertical;
     }
-    .drop-zone p { margin: 0; color: #666; }
-    #file-name { margin-top: 8px; font-weight: 600; color: #1a1a1a; }
-    button {
-      margin-top: 16px;
-      padding: 10px 24px;
-      font-size: 1rem;
+    input[type="text"], select {
+      padding: 8px 10px;
+      font-size: 0.95rem;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+    }
+    button.primary {
+      padding: 9px 20px;
+      font-size: 0.95rem;
       border: none;
       border-radius: 6px;
       background: #4f7cff;
       color: white;
       cursor: pointer;
     }
-    button:disabled { background: #b8c6f5; cursor: not-allowed; }
-    #status { margin-top: 16px; }
-    #status.error { color: #c62828; }
-    .meta { color: #666; font-size: 0.9rem; margin-top: 16px; }
-    pre {
+    button.primary:disabled { background: #b8c6f5; cursor: not-allowed; }
+    button.ghost {
+      padding: 9px 16px;
+      font-size: 0.9rem;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      background: white;
+      cursor: pointer;
+    }
+    .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin: 10px 0; }
+    .status-msg { margin: 10px 0; }
+    .status-msg.error { color: #c62828; }
+    .muted { color: #666; font-size: 0.88rem; }
+
+    table { width: 100%; border-collapse: collapse; }
+    th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid #eee; font-size: 0.92rem; }
+    tr.clickable { cursor: pointer; }
+    tr.clickable:hover { background: #f6f8ff; }
+
+    .badge {
+      display: inline-block;
+      padding: 2px 9px;
+      border-radius: 999px;
+      font-size: 0.78rem;
+      font-weight: 600;
+      background: #eef1f7;
+      color: #444;
+      white-space: nowrap;
+    }
+    .badge.cat { background: #e7edff; color: #3557c9; }
+    .badge.urg-haute { background: #fde3e3; color: #c62828; }
+    .badge.urg-normale { background: #fff3d6; color: #9a6b00; }
+    .badge.urg-basse { background: #e3f3e5; color: #2e7d32; }
+    .badge.st-nouveau { background: #e7edff; color: #3557c9; }
+    .badge.st-brouillon { background: #fff3d6; color: #9a6b00; }
+    .badge.st-traité { background: #e3f3e5; color: #2e7d32; }
+
+    pre.doc-text {
       background: #f5f5f5;
       border-radius: 6px;
-      padding: 16px;
+      padding: 12px;
       white-space: pre-wrap;
       word-break: break-word;
-      max-height: 400px;
+      max-height: 260px;
       overflow-y: auto;
+      font-size: 0.88rem;
     }
+    details summary { cursor: pointer; color: #4f7cff; margin: 8px 0; }
+    .hidden { display: none; }
   </style>
 </head>
 <body>
-  <h1>Extraction de texte PDF</h1>
+  <h1>Traitement de courrier administratif</h1>
+  <nav>
+    <button data-tab="inbox" class="active">Boîte de réception</button>
+    <button data-tab="docs">Base documentaire</button>
+    <button data-tab="stats">Statistiques</button>
+  </nav>
 
-  <div class="drop-zone" id="drop-zone">
-    <p>Glisse un PDF ici ou clique pour en choisir un</p>
-    <p id="file-name"></p>
-  </div>
-  <input type="file" id="file-input" accept="application/pdf" hidden>
+  <!-- ==================== RÉCEPTION ==================== -->
+  <section id="tab-inbox">
+    <div class="card">
+      <h2>Nouveau courrier reçu</h2>
+      <div class="drop-zone" id="inbox-drop">
+        <p>Glisse une photo, un scan ou un PDF ici — ou clique pour choisir</p>
+        <p class="file-name" id="inbox-file-name"></p>
+      </div>
+      <input type="file" id="inbox-file" accept="application/pdf,image/*" hidden>
+      <p class="muted" style="text-align:center; margin: 10px 0;">— ou colle le texte —</p>
+      <textarea id="inbox-text" rows="4" placeholder="Colle ici le texte d'un email ou d'un courrier…"></textarea>
+      <div class="row">
+        <button class="primary" id="inbox-submit">Réceptionner et analyser</button>
+        <span id="inbox-status" class="status-msg"></span>
+      </div>
+    </div>
 
-  <button id="submit-btn" disabled>Extraire le texte</button>
+    <div class="card">
+      <div class="row" style="justify-content: space-between;">
+        <h2 style="margin:0;">Courriers</h2>
+        <span>
+          <select id="filter-category"><option value="">Toutes catégories</option></select>
+          <select id="filter-status">
+            <option value="">Tous statuts</option>
+            <option value="nouveau">nouveau</option>
+            <option value="brouillon">brouillon</option>
+            <option value="traité">traité</option>
+          </select>
+        </span>
+      </div>
+      <table>
+        <thead><tr><th>Date</th><th>Résumé</th><th>Catégorie</th><th>Urgence</th><th>Dossier</th><th>Statut</th></tr></thead>
+        <tbody id="inbox-list"></tbody>
+      </table>
+      <p class="muted" id="inbox-empty">Aucun courrier pour l'instant.</p>
+    </div>
 
-  <div id="status"></div>
-  <div id="result" hidden>
-    <p class="meta" id="result-meta"></p>
-    <pre id="result-text"></pre>
-  </div>
+    <div class="card hidden" id="detail">
+      <div class="row" style="justify-content: space-between;">
+        <h2 style="margin:0;">Courrier #<span id="d-id"></span></h2>
+        <button class="ghost" onclick="document.getElementById('detail').classList.add('hidden')">Fermer</button>
+      </div>
+      <div class="row" id="d-badges"></div>
+      <p id="d-summary"></p>
+      <details><summary>Texte numérisé complet</summary><pre class="doc-text" id="d-raw"></pre></details>
+
+      <h2>Brouillon de réponse</h2>
+      <div class="row">
+        <button class="primary" id="d-generate">Générer le brouillon</button>
+        <span id="d-status" class="status-msg"></span>
+      </div>
+      <textarea id="d-draft" rows="12" placeholder="Le brouillon généré apparaîtra ici — éditable."></textarea>
+      <div class="row">
+        <button class="primary" id="d-save">Enregistrer</button>
+        <button class="ghost" id="d-copy">Copier</button>
+        <label>Statut :
+          <select id="d-status-select">
+            <option value="nouveau">nouveau</option>
+            <option value="brouillon">brouillon</option>
+            <option value="traité">traité</option>
+          </select>
+        </label>
+      </div>
+      <details id="d-sources-wrap" class="hidden">
+        <summary>Sources utilisées par l'IA</summary>
+        <div id="d-sources"></div>
+      </details>
+    </div>
+  </section>
+
+  <!-- ==================== BASE DOCUMENTAIRE ==================== -->
+  <section id="tab-docs" class="hidden">
+    <div class="card">
+      <h2>Ajouter un document de référence (PDF)</h2>
+      <p class="muted">Ces documents alimentent l'IA pour la rédaction : modèles de réponses, courriers passés, pièces de dossiers.</p>
+      <div class="drop-zone" id="doc-drop">
+        <p>Glisse un PDF ici ou clique pour choisir</p>
+        <p class="file-name" id="doc-file-name"></p>
+      </div>
+      <input type="file" id="doc-file" accept="application/pdf" hidden>
+      <div class="row">
+        <label>Type :
+          <select id="doc-type">
+            <option value="modele">Modèle de réponse</option>
+            <option value="historique">Courrier passé</option>
+            <option value="dossier">Pièce de dossier</option>
+          </select>
+        </label>
+        <input type="text" id="doc-ref" placeholder="Réf. dossier (si pièce de dossier)">
+        <button class="primary" id="doc-submit">Indexer</button>
+        <span id="doc-status" class="status-msg"></span>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Documents indexés</h2>
+      <table>
+        <thead><tr><th>Fichier</th><th>Type</th><th>Réf. dossier</th><th>Extraits</th><th></th></tr></thead>
+        <tbody id="doc-list"></tbody>
+      </table>
+      <p class="muted" id="doc-empty">Aucun document indexé.</p>
+    </div>
+  </section>
+
+  <!-- ==================== STATS ==================== -->
+  <section id="tab-stats" class="hidden">
+    <div class="card">
+      <h2>Vue d'ensemble</h2>
+      <p id="stats-total" class="muted"></p>
+      <div class="row" style="align-items: flex-start; gap: 40px;">
+        <div>
+          <h3>Par catégorie</h3>
+          <table><tbody id="stats-category"></tbody></table>
+        </div>
+        <div>
+          <h3>Par statut</h3>
+          <table><tbody id="stats-status"></tbody></table>
+        </div>
+      </div>
+    </div>
+  </section>
 
   <script>
-    const API_URL = "http://localhost:8000/extract-text";
+    const API = "http://localhost:8000";
+    const $ = (id) => document.getElementById(id);
+    let currentId = null;
 
-    const dropZone = document.getElementById("drop-zone");
-    const fileInput = document.getElementById("file-input");
-    const fileName = document.getElementById("file-name");
-    const submitBtn = document.getElementById("submit-btn");
-    const status = document.getElementById("status");
-    const result = document.getElementById("result");
-    const resultMeta = document.getElementById("result-meta");
-    const resultText = document.getElementById("result-text");
-
-    let selectedFile = null;
-
-    function selectFile(file) {
-      if (!file) return;
-      selectedFile = file;
-      fileName.textContent = file.name;
-      submitBtn.disabled = false;
-      status.textContent = "";
-      result.hidden = true;
+    async function api(path, options = {}) {
+      const res = await fetch(API + path, options);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.detail || `Erreur ${res.status}`);
+      return data;
+    }
+    function setStatus(el, msg, isError = false) {
+      el.textContent = msg;
+      el.className = "status-msg" + (isError ? " error" : "");
+    }
+    function badge(text, cls) {
+      return text ? `<span class="badge ${cls}">${text}</span>` : "";
     }
 
-    dropZone.addEventListener("click", () => fileInput.click());
-    fileInput.addEventListener("change", () => selectFile(fileInput.files[0]));
-
-    dropZone.addEventListener("dragover", (e) => {
-      e.preventDefault();
-      dropZone.classList.add("dragover");
+    // ---------- Onglets ----------
+    document.querySelectorAll("nav button").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        document.querySelectorAll("nav button").forEach((b) => b.classList.remove("active"));
+        btn.classList.add("active");
+        ["inbox", "docs", "stats"].forEach((t) =>
+          $("tab-" + t).classList.toggle("hidden", t !== btn.dataset.tab)
+        );
+        if (btn.dataset.tab === "stats") loadStats();
+        if (btn.dataset.tab === "docs") loadDocs();
+      });
     });
-    dropZone.addEventListener("dragleave", () => dropZone.classList.remove("dragover"));
-    dropZone.addEventListener("drop", (e) => {
-      e.preventDefault();
-      dropZone.classList.remove("dragover");
-      selectFile(e.dataTransfer.files[0]);
-    });
 
-    submitBtn.addEventListener("click", async () => {
-      if (!selectedFile) return;
+    // ---------- Drop zones ----------
+    function setupDropZone(zoneId, inputId, nameId) {
+      const zone = $(zoneId), input = $(inputId);
+      zone.addEventListener("click", () => input.click());
+      input.addEventListener("change", () => {
+        $(nameId).textContent = input.files[0]?.name || "";
+      });
+      zone.addEventListener("dragover", (e) => { e.preventDefault(); zone.classList.add("dragover"); });
+      zone.addEventListener("dragleave", () => zone.classList.remove("dragover"));
+      zone.addEventListener("drop", (e) => {
+        e.preventDefault();
+        zone.classList.remove("dragover");
+        input.files = e.dataTransfer.files;
+        $(nameId).textContent = input.files[0]?.name || "";
+      });
+    }
+    setupDropZone("inbox-drop", "inbox-file", "inbox-file-name");
+    setupDropZone("doc-drop", "doc-file", "doc-file-name");
 
-      submitBtn.disabled = true;
-      status.className = "";
-      status.textContent = "Extraction en cours…";
-      result.hidden = true;
+    // ---------- Réception ----------
+    $("inbox-submit").addEventListener("click", async () => {
+      const file = $("inbox-file").files[0];
+      const text = $("inbox-text").value.trim();
+      if (!file && !text) return setStatus($("inbox-status"), "Fournis un fichier ou un texte.", true);
 
       const formData = new FormData();
-      formData.append("file", selectedFile);
+      if (text) formData.append("text", text);
+      else formData.append("file", file);
 
+      $("inbox-submit").disabled = true;
+      setStatus($("inbox-status"), "Numérisation et analyse en cours…");
       try {
-        const response = await fetch(API_URL, { method: "POST", body: formData });
-        const data = await response.json();
-
-        if (!response.ok) {
-          throw new Error(data.detail || `Erreur ${response.status}`);
-        }
-
-        status.textContent = "";
-        resultMeta.textContent = `${data.filename} — ${data.num_pages} page(s)`;
-        resultText.textContent = data.text || "(aucun texte trouvé)";
-        result.hidden = false;
+        const item = await api("/inbox", { method: "POST", body: formData });
+        setStatus($("inbox-status"), `Classé « ${item.category} » (urgence ${item.urgency}).`);
+        $("inbox-text").value = "";
+        $("inbox-file").value = "";
+        $("inbox-file-name").textContent = "";
+        await loadInbox();
+        openDetail(item);
       } catch (err) {
-        status.className = "error";
-        status.textContent = err.message === "Failed to fetch"
-          ? "Impossible de joindre l'API. Vérifie que le serveur tourne sur le port 8000."
-          : err.message;
+        setStatus($("inbox-status"), err.message, true);
       } finally {
-        submitBtn.disabled = false;
+        $("inbox-submit").disabled = false;
       }
     });
+
+    async function loadInbox() {
+      const params = new URLSearchParams();
+      if ($("filter-category").value) params.set("category", $("filter-category").value);
+      if ($("filter-status").value) params.set("status", $("filter-status").value);
+      const items = await api("/inbox?" + params);
+      $("inbox-empty").classList.toggle("hidden", items.length > 0);
+      $("inbox-list").innerHTML = items.map((i) => `
+        <tr class="clickable" data-id="${i.id}">
+          <td>${(i.created_at || "").slice(0, 16)}</td>
+          <td>${(i.summary || "").slice(0, 70)}${(i.summary || "").length > 70 ? "…" : ""}</td>
+          <td>${badge(i.category, "cat")}</td>
+          <td>${badge(i.urgency, "urg-" + i.urgency)}</td>
+          <td>${i.dossier_ref || "—"}</td>
+          <td>${badge(i.status, "st-" + i.status)}</td>
+        </tr>`).join("");
+      document.querySelectorAll("#inbox-list tr").forEach((tr) =>
+        tr.addEventListener("click", async () => openDetail(await api("/inbox/" + tr.dataset.id)))
+      );
+    }
+    $("filter-category").addEventListener("change", loadInbox);
+    $("filter-status").addEventListener("change", loadInbox);
+
+    // ---------- Détail ----------
+    function openDetail(item) {
+      currentId = item.id;
+      $("d-id").textContent = item.id;
+      $("d-summary").textContent = item.summary || "";
+      $("d-raw").textContent = item.raw_text || "";
+      $("d-draft").value = item.draft || "";
+      $("d-status-select").value = item.status;
+      $("d-badges").innerHTML =
+        badge(item.category, "cat") +
+        badge(item.urgency, "urg-" + item.urgency) +
+        (item.dossier_ref ? badge("dossier " + item.dossier_ref, "") : "");
+      $("d-sources-wrap").classList.add("hidden");
+      setStatus($("d-status"), "");
+      $("detail").classList.remove("hidden");
+      $("detail").scrollIntoView({ behavior: "smooth" });
+    }
+
+    $("d-generate").addEventListener("click", async () => {
+      $("d-generate").disabled = true;
+      setStatus($("d-status"), "Génération du brouillon (RAG + IA)…");
+      try {
+        const item = await api(`/inbox/${currentId}/draft`, { method: "POST" });
+        $("d-draft").value = item.draft;
+        $("d-status-select").value = item.status;
+        const src = item.rag_sources;
+        const fmt = (list, title) => list.length
+          ? `<h4>${title}</h4>` + list.map((s) => `<pre class="doc-text">[${s.source}] ${s.text.slice(0, 300)}…</pre>`).join("")
+          : "";
+        $("d-sources").innerHTML =
+          fmt(src.dossier, "Pièces du dossier") + fmt(src.modeles, "Modèles / historique") ||
+          "<p class='muted'>Aucune source RAG trouvée — le brouillon est généré sans contexte documentaire.</p>";
+        $("d-sources-wrap").classList.remove("hidden");
+        setStatus($("d-status"), "Brouillon généré.");
+        loadInbox();
+      } catch (err) {
+        setStatus($("d-status"), err.message, true);
+      } finally {
+        $("d-generate").disabled = false;
+      }
+    });
+
+    $("d-save").addEventListener("click", async () => {
+      try {
+        await api(`/inbox/${currentId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ draft: $("d-draft").value, status: $("d-status-select").value }),
+        });
+        setStatus($("d-status"), "Enregistré.");
+        loadInbox();
+      } catch (err) {
+        setStatus($("d-status"), err.message, true);
+      }
+    });
+
+    $("d-copy").addEventListener("click", () => {
+      navigator.clipboard.writeText($("d-draft").value);
+      setStatus($("d-status"), "Copié dans le presse-papier.");
+    });
+
+    // ---------- Base documentaire ----------
+    $("doc-submit").addEventListener("click", async () => {
+      const file = $("doc-file").files[0];
+      if (!file) return setStatus($("doc-status"), "Choisis un PDF.", true);
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("doc_type", $("doc-type").value);
+      formData.append("dossier_ref", $("doc-ref").value.trim());
+      $("doc-submit").disabled = true;
+      setStatus($("doc-status"), "Indexation…");
+      try {
+        const res = await api("/documents", { method: "POST", body: formData });
+        setStatus($("doc-status"), `Indexé (${res.chunks} extrait(s)).`);
+        $("doc-file").value = "";
+        $("doc-file-name").textContent = "";
+        $("doc-ref").value = "";
+        loadDocs();
+      } catch (err) {
+        setStatus($("doc-status"), err.message, true);
+      } finally {
+        $("doc-submit").disabled = false;
+      }
+    });
+
+    const DOC_TYPE_LABELS = { modele: "Modèle", historique: "Courrier passé", dossier: "Pièce de dossier" };
+    async function loadDocs() {
+      const docs = await api("/documents");
+      $("doc-empty").classList.toggle("hidden", docs.length > 0);
+      $("doc-list").innerHTML = docs.map((d) => `
+        <tr>
+          <td>${d.source}</td>
+          <td>${DOC_TYPE_LABELS[d.doc_type] || d.doc_type}</td>
+          <td>${d.dossier_ref || "—"}</td>
+          <td>${d.chunks}</td>
+          <td><button class="ghost doc-delete" data-source="${encodeURIComponent(d.source)}" title="Supprimer du RAG">🗑</button></td>
+        </tr>`).join("");
+      document.querySelectorAll(".doc-delete").forEach((btn) =>
+        btn.addEventListener("click", async () => {
+          const name = decodeURIComponent(btn.dataset.source);
+          if (!confirm(`Supprimer « ${name} » de la base documentaire ?`)) return;
+          try {
+            await api("/documents/" + btn.dataset.source, { method: "DELETE" });
+            setStatus($("doc-status"), `« ${name} » supprimé.`);
+            loadDocs();
+          } catch (err) {
+            setStatus($("doc-status"), err.message, true);
+          }
+        })
+      );
+    }
+
+    // ---------- Stats ----------
+    async function loadStats() {
+      const s = await api("/stats");
+      $("stats-total").textContent = `${s.total} courrier(s) reçu(s) au total.`;
+      const rows = (obj) =>
+        Object.entries(obj).map(([k, v]) => `<tr><td>${k}</td><td><strong>${v}</strong></td></tr>`).join("") ||
+        "<tr><td class='muted'>Aucune donnée</td></tr>";
+      $("stats-category").innerHTML = rows(s.by_category);
+      $("stats-status").innerHTML = rows(s.by_status);
+    }
+
+    // ---------- Init ----------
+    (async function init() {
+      try {
+        const categories = await api("/categories");
+        $("filter-category").innerHTML =
+          '<option value="">Toutes catégories</option>' +
+          categories.map((c) => `<option value="${c}">${c}</option>`).join("");
+        await loadInbox();
+      } catch (err) {
+        setStatus($("inbox-status"), "API injoignable — vérifie que le serveur tourne sur le port 8000.", true);
+      }
+    })();
   </script>
 </body>
 </html>

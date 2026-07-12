@@ -2,3 +2,7 @@ fastapi
 uvicorn[standard]
 pypdf
 python-multipart
+chromadb
+sentence-transformers
+anthropic
+python-dotenv

@@ -11,6 +11,12 @@ __pycache__/
 # Environnement / secrets
 .env
 
+# Base vectorielle RAG
+chroma_db/
+
+# Base de données applicative
+app.db
+
 # IDE
 .vscode/
 .idea/
