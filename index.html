@@ -1,1 +1,144 @@
-test
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Extraction de texte PDF</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      max-width: 720px;
+      margin: 40px auto;
+      padding: 0 20px;
+      color: #1a1a1a;
+    }
+    h1 { font-size: 1.5rem; }
+    .drop-zone {
+      border: 2px dashed #bbb;
+      border-radius: 8px;
+      padding: 40px 20px;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 0.2s, background 0.2s;
+    }
+    .drop-zone.dragover {
+      border-color: #4f7cff;
+      background: #f0f4ff;
+    }
+    .drop-zone p { margin: 0; color: #666; }
+    #file-name { margin-top: 8px; font-weight: 600; color: #1a1a1a; }
+    button {
+      margin-top: 16px;
+      padding: 10px 24px;
+      font-size: 1rem;
+      border: none;
+      border-radius: 6px;
+      background: #4f7cff;
+      color: white;
+      cursor: pointer;
+    }
+    button:disabled { background: #b8c6f5; cursor: not-allowed; }
+    #status { margin-top: 16px; }
+    #status.error { color: #c62828; }
+    .meta { color: #666; font-size: 0.9rem; margin-top: 16px; }
+    pre {
+      background: #f5f5f5;
+      border-radius: 6px;
+      padding: 16px;
+      white-space: pre-wrap;
+      word-break: break-word;
+      max-height: 400px;
+      overflow-y: auto;
+    }
+  </style>
+</head>
+<body>
+  <h1>Extraction de texte PDF</h1>
+
+  <div class="drop-zone" id="drop-zone">
+    <p>Glisse un PDF ici ou clique pour en choisir un</p>
+    <p id="file-name"></p>
+  </div>
+  <input type="file" id="file-input" accept="application/pdf" hidden>
+
+  <button id="submit-btn" disabled>Extraire le texte</button>
+
+  <div id="status"></div>
+  <div id="result" hidden>
+    <p class="meta" id="result-meta"></p>
+    <pre id="result-text"></pre>
+  </div>
+
+  <script>
+    const API_URL = "http://localhost:8000/extract-text";
+
+    const dropZone = document.getElementById("drop-zone");
+    const fileInput = document.getElementById("file-input");
+    const fileName = document.getElementById("file-name");
+    const submitBtn = document.getElementById("submit-btn");
+    const status = document.getElementById("status");
+    const result = document.getElementById("result");
+    const resultMeta = document.getElementById("result-meta");
+    const resultText = document.getElementById("result-text");
+
+    let selectedFile = null;
+
+    function selectFile(file) {
+      if (!file) return;
+      selectedFile = file;
+      fileName.textContent = file.name;
+      submitBtn.disabled = false;
+      status.textContent = "";
+      result.hidden = true;
+    }
+
+    dropZone.addEventListener("click", () => fileInput.click());
+    fileInput.addEventListener("change", () => selectFile(fileInput.files[0]));
+
+    dropZone.addEventListener("dragover", (e) => {
+      e.preventDefault();
+      dropZone.classList.add("dragover");
+    });
+    dropZone.addEventListener("dragleave", () => dropZone.classList.remove("dragover"));
+    dropZone.addEventListener("drop", (e) => {
+      e.preventDefault();
+      dropZone.classList.remove("dragover");
+      selectFile(e.dataTransfer.files[0]);
+    });
+
+    submitBtn.addEventListener("click", async () => {
+      if (!selectedFile) return;
+
+      submitBtn.disabled = true;
+      status.className = "";
+      status.textContent = "Extraction en cours…";
+      result.hidden = true;
+
+      const formData = new FormData();
+      formData.append("file", selectedFile);
+
+      try {
+        const response = await fetch(API_URL, { method: "POST", body: formData });
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data.detail || `Erreur ${response.status}`);
+        }
+
+        status.textContent = "";
+        resultMeta.textContent = `${data.filename} — ${data.num_pages} page(s)`;
+        resultText.textContent = data.text || "(aucun texte trouvé)";
+        result.hidden = false;
+      } catch (err) {
+        status.className = "error";
+        status.textContent = err.message === "Failed to fetch"
+          ? "Impossible de joindre l'API. Vérifie que le serveur tourne sur le port 8000."
+          : err.message;
+      } finally {
+        submitBtn.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>
